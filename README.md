@@ -1,4 +1,4 @@
-# 🚦 Tutorial: Traffic Density Detection
+# 🚦 Tutorial: Traffic Density Prediction
 
 Sistem deteksi keramaian jalan secara *real-time* menggunakan **YOLOv8** dan stream CCTV publik.
 
