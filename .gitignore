@@ -1,0 +1,38 @@
+# Environments
+venv/
+env/
+.env
+__pycache__/
+*.py[cod]
+*$py.class
+
+# IDEs and Editors
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS generated files
+.DS_Store
+.DS_Store?
+._*
+.Spotlight-V100
+.Trashes
+ehthumbs.db
+Thumbs.db
+
+# Machine Learning / YOLO weights
+*.pt
+*.onnx
+*.weights
+*.h5
+
+# Logs and databases
+*.log
+*.sqlite3
+
+# Project specific ignores (if any data folders are added later)
+dataset/
+data/
+outputs/
+runs/
