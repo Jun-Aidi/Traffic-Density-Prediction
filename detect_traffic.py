@@ -18,6 +18,7 @@ import threading
 import time
 import queue
 from ultralytics import YOLO
+import database
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # KONFIGURASI
@@ -37,6 +38,9 @@ MIN_START      = 30
 YOLO_MODEL     = "yolov8n.pt"       # model nano — ringan & cepat
 CONFIDENCE     = 0.35               # threshold confidence
 DETECT_EVERY   = 3                  # deteksi setiap N frame (hemat CPU/GPU)
+
+# Database config
+DB_SAVE_INTERVAL = 60               # Simpan data ke PostgreSQL setiap N detik
 
 # Kelas kendaraan dari COCO dataset (YOLOv8)
 # 2=car, 3=motorcycle, 5=bus, 7=truck, 1=bicycle
@@ -192,7 +196,10 @@ def draw_overlay(frame, vehicle_count, fps_display, buffer_size, class_counts):
 cv2.namedWindow("Traffic Density - CCTV", cv2.WINDOW_NORMAL)
 cv2.resizeWindow("Traffic Density - CCTV", 1280, 960)
 
-print(f"Buffering... (menunggu {MIN_START} frame)")
+print("\n[DB] Menginisialisasi Database...")
+database.init_db()
+
+print(f"\nBuffering... (menunggu {MIN_START} frame)")
 while frame_queue.qsize() < MIN_START and not stop_event.is_set():
     time.sleep(0.05)
 
@@ -213,6 +220,8 @@ last_classes     = []
 last_confidences = []
 last_count       = 0
 last_class_counts = {}
+
+last_db_save_time = time.perf_counter()
 
 while not stop_event.is_set():
     now     = time.perf_counter()
@@ -283,6 +292,23 @@ while not stop_event.is_set():
 
     frame = draw_overlay(frame, last_count, fps_display,
                          frame_queue.qsize(), last_class_counts)
+
+    # ─── Simpan ke Database (setiap DB_SAVE_INTERVAL) ───────────────
+    if now - last_db_save_time >= DB_SAVE_INTERVAL:
+        density_label, _ = get_density_info(last_count)
+        cars = last_class_counts.get(2, 0)
+        motorcycles = last_class_counts.get(3, 0)
+        buses = last_class_counts.get(5, 0)
+        trucks = last_class_counts.get(7, 0)
+        
+        # Jalankan di thread terpisah agar tidak membuat frame nge-lag saat insert
+        threading.Thread(
+            target=database.insert_traffic_data,
+            args=(density_label, last_count, cars, motorcycles, buses, trucks),
+            daemon=True
+        ).start()
+        
+        last_db_save_time = now
 
     cv2.imshow("Traffic Density - CCTV", frame)
 
