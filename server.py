@@ -32,12 +32,13 @@ DETECT_EVERY = 3
 VEHICLE_CLASSES = {1, 2, 3, 5, 7}
 CLASS_NAMES = {1: "Sepeda", 2: "Mobil", 3: "Motor", 5: "Bus", 7: "Truk"}
 DENSITY_THRESHOLDS = [
-    (5,   "SEPI"),
-    (15,  "NORMAL"),
-    (30,  "RAMAI"),
-    (999, "PADAT"),
+    (8,    "Empty"),
+    (20,   "Low"),
+    (49,   "Medium"),
+    (99,   "High"),
+    (9999, "Traffic Jam"),
 ]
-DB_SAVE_INTERVAL = 60   # detik
+DB_SAVE_INTERVAL = 10   # detik
 BROADCAST_INTERVAL = 0.15  # ~7 kali per detik
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -212,13 +213,14 @@ def detection_thread():
         # ─── Simpan ke Database secara berkala ───────────────────────────────
         now = time.time()
         if now - last_db_save >= DB_SAVE_INTERVAL:
+            bicycles    = last_class_counts.get("Sepeda", 0)
             cars        = last_class_counts.get("Mobil", 0)
             motorcycles = last_class_counts.get("Motor", 0)
             buses       = last_class_counts.get("Bus", 0)
             trucks      = last_class_counts.get("Truk", 0)
             threading.Thread(
                 target=database.insert_traffic_data,
-                args=(density, last_count, cars, motorcycles, buses, trucks),
+                args=(density, last_count, bicycles, cars, motorcycles, buses, trucks),
                 daemon=True,
             ).start()
             last_db_save = now

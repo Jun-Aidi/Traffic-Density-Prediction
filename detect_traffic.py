@@ -3,12 +3,19 @@ Deteksi Keramaian Jalan (Traffic Density Detection)
 Menggunakan YOLOv8 untuk mendeteksi kendaraan dari stream CCTV.
 
 Tingkat keramaian ditentukan berdasarkan jumlah kendaraan terdeteksi:
-  - SEPI    : 0-5 kendaraan
-  - NORMAL  : 6-15 kendaraan
-  - RAMAI   : 16-30 kendaraan
-  - PADAT   : >30 kendaraan
+  - Empty       : 0-8 kendaraan   (Almost empty street)
+  - Low         : 9-20 kendaraan  (Only a few cars)
+  - Medium      : 21-49 kendaraan (Slightly filled street)
+  - High        : 50-99 kendaraan (Filled street or blocked lane)
+  - Traffic Jam : >=100 kendaraan (Traffic almost not moving)
 
-Tekan Q untuk keluar.
+Mode:
+  - HEADLESS = False : Menampilkan jendela video CCTV (default)
+  - HEADLESS = True  : Berjalan di background tanpa jendela video,
+                       hanya menyimpan data ke database.
+                       Tekan Ctrl+C untuk menghentikan.
+
+Tekan Q untuk keluar (hanya saat HEADLESS = False).
 """
 
 import subprocess
@@ -42,6 +49,11 @@ DETECT_EVERY   = 3                  # deteksi setiap N frame (hemat CPU/GPU)
 # Database config
 DB_SAVE_INTERVAL = 60               # Simpan data ke PostgreSQL setiap N detik
 
+# ─── Headless Mode ────────────────────────────────────────────────────────────
+# True  = Berjalan di background tanpa jendela video (hemat CPU/GPU)
+# False = Menampilkan jendela video CCTV seperti biasa
+HEADLESS = False
+
 # Kelas kendaraan dari COCO dataset (YOLOv8)
 # 2=car, 3=motorcycle, 5=bus, 7=truck, 1=bicycle
 VEHICLE_CLASSES = {1, 2, 3, 5, 7}
@@ -55,10 +67,11 @@ CLASS_NAMES = {
 
 # Threshold keramaian
 DENSITY_THRESHOLDS = [
-    (5,  "SEPI",   (0, 255, 0)),      # hijau
-    (15, "NORMAL", (0, 255, 255)),     # kuning
-    (30, "RAMAI",  (0, 165, 255)),     # oranye
-    (999,"PADAT",  (0, 0, 255)),       # merah
+    (8,   "Empty",       (0, 255, 0)),      # hijau
+    (20,  "Low",         (0, 255, 180)),     # hijau-kuning
+    (49,  "Medium",      (0, 255, 255)),     # kuning
+    (99,  "High",        (0, 165, 255)),     # oranye
+    (9999,"Traffic Jam", (0, 0, 255)),       # merah
 ]
 
 # ═══════════════════════════════════════════════════════════════════════════════
@@ -122,7 +135,7 @@ def get_density_info(count):
     for threshold, label, color in DENSITY_THRESHOLDS:
         if count <= threshold:
             return label, color
-    return "PADAT", (0, 0, 255)
+    return "Traffic Jam", (0, 0, 255)
 
 
 def draw_detections(frame, boxes, classes, confidences):
@@ -177,7 +190,7 @@ def draw_overlay(frame, vehicle_count, fps_display, buffer_size, class_counts):
 
     # Bar indikator keramaian
     bar_x, bar_y, bar_w, bar_h = 10, panel_h + 10, 400, 18
-    fill_ratio = min(vehicle_count / 40.0, 1.0)
+    fill_ratio = min(vehicle_count / 100.0, 1.0)
     cv2.rectangle(frame, (bar_x, bar_y), (bar_x + bar_w, bar_y + bar_h),
                   (80, 80, 80), -1)
     cv2.rectangle(frame, (bar_x, bar_y),
@@ -193,8 +206,9 @@ def draw_overlay(frame, vehicle_count, fps_display, buffer_size, class_counts):
 # LOOP UTAMA
 # ═══════════════════════════════════════════════════════════════════════════════
 
-cv2.namedWindow("Traffic Density - CCTV", cv2.WINDOW_NORMAL)
-cv2.resizeWindow("Traffic Density - CCTV", 1280, 960)
+if not HEADLESS:
+    cv2.namedWindow("Traffic Density - CCTV", cv2.WINDOW_NORMAL)
+    cv2.resizeWindow("Traffic Density - CCTV", 1280, 960)
 
 print("\n[DB] Menginisialisasi Database...")
 database.init_db()
@@ -205,7 +219,10 @@ while frame_queue.qsize() < MIN_START and not stop_event.is_set():
 
 print(f"Stream aktif | {DISPLAY_FPS} fps | Resolusi: {PIPE_W}x{PIPE_H}")
 print(f"Deteksi setiap {DETECT_EVERY} frame | Confidence: {CONFIDENCE}")
-print("Tekan Q untuk keluar\n")
+if HEADLESS:
+    print("Mode: HEADLESS (background) — Tekan Ctrl+C untuk menghentikan\n")
+else:
+    print("Mode: DISPLAY (tampilan video aktif) — Tekan Q untuk keluar\n")
 
 fps_count       = 0
 fps_display     = 0.0
@@ -224,11 +241,19 @@ last_class_counts = {}
 last_db_save_time = time.perf_counter()
 
 while not stop_event.is_set():
-    now     = time.perf_counter()
-    wait_ms = max(1, int((next_frame_time - now) * 1000))
-    if cv2.waitKey(wait_ms) & 0xFF == ord("q"):
-        stop_event.set()
-        break
+    now = time.perf_counter()
+
+    if HEADLESS:
+        # Mode background: tidak ada jendela, cukup tunggu interval frame
+        sleep_time = next_frame_time - now
+        if sleep_time > 0:
+            time.sleep(sleep_time)
+    else:
+        # Mode tampilan: gunakan cv2.waitKey untuk handle event keyboard
+        wait_ms = max(1, int((next_frame_time - now) * 1000))
+        if cv2.waitKey(wait_ms) & 0xFF == ord("q"):
+            stop_event.set()
+            break
 
     if time.perf_counter() < next_frame_time:
         continue
@@ -278,11 +303,7 @@ while not stop_event.is_set():
             last_count       = 0
             last_class_counts = {}
 
-    # ─── Gambar hasil deteksi ─────────────────────────────────────────────
-    if len(last_boxes) > 0:
-        frame = draw_detections(frame, last_boxes, last_classes, last_confidences)
-
-    # ─── Overlay info ─────────────────────────────────────────────────────
+    # ─── Gambar hasil deteksi & overlay (hanya saat tidak HEADLESS) ─────────
     fps_count += 1
     elapsed = time.perf_counter() - fps_timer
     if elapsed >= 1.0:
@@ -290,27 +311,32 @@ while not stop_event.is_set():
         fps_count   = 0
         fps_timer   = time.perf_counter()
 
-    frame = draw_overlay(frame, last_count, fps_display,
-                         frame_queue.qsize(), last_class_counts)
+    if not HEADLESS:
+        if len(last_boxes) > 0:
+            frame = draw_detections(frame, last_boxes, last_classes, last_confidences)
+        frame = draw_overlay(frame, last_count, fps_display,
+                             frame_queue.qsize(), last_class_counts)
 
-    # ─── Simpan ke Database (setiap DB_SAVE_INTERVAL) ───────────────
+    # ─── Save to Database (every DB_SAVE_INTERVAL seconds) ──────────────
     if now - last_db_save_time >= DB_SAVE_INTERVAL:
         density_label, _ = get_density_info(last_count)
-        cars = last_class_counts.get(2, 0)
-        motorcycles = last_class_counts.get(3, 0)
-        buses = last_class_counts.get(5, 0)
-        trucks = last_class_counts.get(7, 0)
+        bicycle    = last_class_counts.get(1, 0)
+        car        = last_class_counts.get(2, 0)
+        motorcycle = last_class_counts.get(3, 0)
+        bus        = last_class_counts.get(5, 0)
+        truck      = last_class_counts.get(7, 0)
         
-        # Jalankan di thread terpisah agar tidak membuat frame nge-lag saat insert
+        # Run in separate thread to avoid frame lag during insert
         threading.Thread(
             target=database.insert_traffic_data,
-            args=(density_label, last_count, cars, motorcycles, buses, trucks),
+            args=(density_label, last_count, bicycle, car, motorcycle, bus, truck),
             daemon=True
         ).start()
         
         last_db_save_time = now
 
-    cv2.imshow("Traffic Density - CCTV", frame)
+    if not HEADLESS:
+        cv2.imshow("Traffic Density - CCTV", frame)
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # CLEANUP
@@ -318,7 +344,8 @@ while not stop_event.is_set():
 
 process.terminate()
 thread.join(timeout=2)
-cv2.destroyAllWindows()
+if not HEADLESS:
+    cv2.destroyAllWindows()
 
 density_label, _ = get_density_info(last_count)
 print(f"\nStream ditutup.")

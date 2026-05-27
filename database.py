@@ -34,6 +34,7 @@ def init_db():
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             density_status VARCHAR(50),
             total_vehicles INTEGER,
+            bicycle_count INTEGER,
             car_count INTEGER,
             motorcycle_count INTEGER,
             bus_count INTEGER,
@@ -49,8 +50,8 @@ def init_db():
     finally:
         conn.close()
 
-def insert_traffic_data(density_status, total, cars, motorcycles, buses, trucks):
-    """Menyisipkan data deteksi ke dalam database"""
+def insert_traffic_data(density_status, total, bicycle, car, motorcycle, bus, truck):
+    """Insert detection data into the database"""
     conn = get_connection()
     if conn is None:
         return
@@ -59,15 +60,15 @@ def insert_traffic_data(density_status, total, cars, motorcycles, buses, trucks)
         cur = conn.cursor()
         insert_query = '''
         INSERT INTO traffic_history (
-            density_status, total_vehicles, car_count, motorcycle_count, bus_count, truck_count
-        ) VALUES (%s, %s, %s, %s, %s, %s)
+            density_status, total_vehicles, bicycle_count, car_count, motorcycle_count, bus_count, truck_count
+        ) VALUES (%s, %s, %s, %s, %s, %s, %s)
         '''
-        cur.execute(insert_query, (density_status, total, cars, motorcycles, buses, trucks))
+        cur.execute(insert_query, (density_status, total, bicycle, car, motorcycle, bus, truck))
         conn.commit()
         cur.close()
-        print(f"[DB] Data berhasil disimpan: {density_status} ({total} kendaraan)")
+        print(f"[DB] Data saved: {density_status} ({total} vehicles)")
     except Exception as e:
-        print(f"[DB] Gagal menyimpan data: {e}")
+        print(f"[DB] Failed to save data: {e}")
     finally:
         conn.close()
 
