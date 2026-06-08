@@ -25,7 +25,7 @@ import threading
 import time
 import queue
 from ultralytics import YOLO
-import database
+import Traffic_Data_Collection.database as database
 
 # ═══════════════════════════════════════════════════════════════════════════════
 # KONFIGURASI
@@ -43,11 +43,11 @@ MIN_START      = 30
 
 # YOLO config
 YOLO_MODEL     = "yolov8n.pt"       # model nano — ringan & cepat
-CONFIDENCE     = 0.35               # threshold confidence
-DETECT_EVERY   = 3                  # deteksi setiap N frame (hemat CPU/GPU)
+CONFIDENCE     = 0.25               # threshold confidence (lebih rendah untuk tangkap kendaraan cepat)
+DETECT_EVERY   = 1                  # deteksi SETIAP frame (tidak skip frame)
 
 # Database config
-DB_SAVE_INTERVAL = 60               # Simpan data ke PostgreSQL setiap N detik
+DB_SAVE_INTERVAL = 5               # Simpan data ke PostgreSQL setiap N detik
 
 # ─── Headless Mode ────────────────────────────────────────────────────────────
 # True  = Berjalan di background tanpa jendela video (hemat CPU/GPU)
@@ -278,7 +278,7 @@ while not stop_event.is_set():
             conf=CONFIDENCE,
             classes=list(VEHICLE_CLASSES),
             verbose=False,
-            imgsz=640,
+            imgsz=800,              # tingkatkan dari 640 untuk tangkap detail kendaraan cepat
         )
 
         if results and results[0].boxes is not None and len(results[0].boxes) > 0:

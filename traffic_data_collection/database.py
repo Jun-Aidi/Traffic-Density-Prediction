@@ -29,7 +29,7 @@ def init_db():
     try:
         cur = conn.cursor()
         create_table_query = '''
-        CREATE TABLE IF NOT EXISTS traffic_history (
+        CREATE TABLE IF NOT EXISTS traffic_history_h7 (
             id SERIAL PRIMARY KEY,
             timestamp TIMESTAMP DEFAULT CURRENT_TIMESTAMP,
             density_status VARCHAR(50),
@@ -44,7 +44,7 @@ def init_db():
         cur.execute(create_table_query)
         conn.commit()
         cur.close()
-        print("[DB] Tabel 'traffic_history' siap digunakan.")
+        print("[DB] Tabel 'traffic_history_h7' siap digunakan.")
     except Exception as e:
         print(f"[DB] Gagal membuat tabel: {e}")
     finally:
@@ -59,7 +59,7 @@ def insert_traffic_data(density_status, total, bicycle, car, motorcycle, bus, tr
     try:
         cur = conn.cursor()
         insert_query = '''
-        INSERT INTO traffic_history (
+        INSERT INTO traffic_history_h7 (
             density_status, total_vehicles, bicycle_count, car_count, motorcycle_count, bus_count, truck_count
         ) VALUES (%s, %s, %s, %s, %s, %s, %s)
         '''
